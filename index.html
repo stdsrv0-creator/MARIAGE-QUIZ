@@ -26,6 +26,12 @@ button.secondary{background:#e9edf2;color:var(--ink)}button:disabled{opacity:.4;
 .good{background:var(--good)}.warn{background:var(--warn)}.bad{background:var(--bad)}
 .hidden{display:none}.small{font-size:13px;color:var(--muted)}
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+.field{margin:14px 0}.field label{display:block;font-weight:bold;font-size:15px;margin-bottom:6px}
+.field input,.field select{width:100%;padding:11px 12px;font-size:15px;font-family:inherit;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.field select:disabled{background:#f1f3f6;color:var(--muted)}
+.err{color:#b3261e;font-size:13px;min-height:18px;margin:8px 0 0}
+.save-status{font-size:13px;margin-top:12px;padding:9px 12px;border-radius:9px;background:var(--soft)}
 @media(max-width:520px){main{margin:10px auto}.hero,.panel{padding:17px}.question{font-size:18px}}
 </style>
 </head>
@@ -37,7 +43,23 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
 <div class="notice"><b>تنبيه:</b> هذا مقياس حواري استرشادي، وليس حكماً شرعياً أو تشخيصاً للشخصية، ولا يثبت وحده صلاحية أي طرف للزواج. تختلف الأحكام والتفاصيل باختلاف الظروف والاتفاقات والحقوق الشرعية والقانونية.</div>
 </section>
 
-<section id="quiz" class="panel">
+<section id="intake" class="panel">
+<h2>بيانات المشاركة</h2>
+<p class="muted">بيانات عامة للتصنيف والتحليل فقط، لا نطلب اسمك الكامل ولا أي معلومة تعريفية أو حساسة.</p>
+<div class="field"><label for="f_name">الاسم الأول أو اسم مستعار</label>
+<input id="f_name" type="text" maxlength="30" autocomplete="off" placeholder="مثال: سارة أو أم خالد"></div>
+<div class="field"><label for="f_gender">الجنس</label>
+<select id="f_gender"><option value="">اختر...</option><option>ذكر</option><option>أنثى</option></select></div>
+<div class="field"><label for="f_marital">الحالة الاجتماعية</label>
+<select id="f_marital" disabled><option value="">اختر الجنس أولاً</option></select></div>
+<div class="field"><label for="f_age">الفئة العمرية</label>
+<select id="f_age"><option value="">اختر...</option>
+<option>أقل من 20</option><option>20-25</option><option>26-30</option><option>31-35</option><option>36-40</option><option>41-45</option><option>فوق 45</option></select></div>
+<div class="err" id="intakeErr"></div>
+<div class="actions" style="justify-content:flex-end"><button id="start" type="button">ابدأ الاختبار</button></div>
+</section>
+
+<section id="quiz" class="panel hidden">
 <div class="meta"><span id="axis">المحور</span><span id="counter">السؤال 1 من 18</span></div>
 <div class="progress-wrap"><div class="progress" id="progress"></div></div>
 <div class="question" id="question"></div>
@@ -67,6 +89,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
 <li><b>الأسرة والمال:</b> تربية الأبناء والتخطيط المالي مسؤولية مشتركة بالتشاور، مع وضوح النفقة والالتزامات وعدم تحميل طرف ما لا يطيق.</li>
 </ul>
 <div class="notice">النتيجة الأفضل ليست أعلى رقم فقط؛ بل وجود توافق حقيقي في المسائل الجوهرية، وقدرة الطرفين على احترام الاختلاف والتفاوض بإنصاف.</div>
+<div id="saveStatus" class="save-status hidden"></div>
 <div class="actions"><button id="restart" type="button">إعادة الاختبار</button><button class="secondary" id="print" type="button">طباعة النتيجة</button></div>
 </section>
 <footer>الاختبار أداة نقاش أولية، ولا يغني عن التعارف الجاد والسؤال والاستشارة الشرعية عند الحاجة.</footer>
@@ -165,9 +188,50 @@ const questions = [
 ["أرى أن تدبير المشكلة مسؤوليته وحده ولا شأن لي بها.",0]]}
 ];
 
+const LETTERS=["أ","ب","ج","د"];
 const axisNames=["الدين والقيم","القوامة والتفاهم","الخلاف والنضج","الأسرة والأبناء","أهل الزوج والسكن","المال والاستقرار"];
 let index=0, chosen=Array(questions.length).fill(null);
 const $=id=>document.getElementById(id);
+/* ====== إعدادات الحفظ في Google Sheets ======
+   الصق هنا رابط تطبيق الويب (Web app URL) من Google Apps Script بعد النشر.
+   إذا تُرك فارغاً لن تُحفظ البيانات. */
+const SHEET_URL="";
+
+const MARITAL={"ذكر":["أعزب","متزوج","مطلق"],"أنثى":["عزباء","متزوجة","مطلقة"]};
+let profile={name:"",gender:"",marital:"",age:""};
+let saved=false;
+
+$("f_gender").onchange=()=>{
+ const g=$("f_gender").value, sel=$("f_marital");
+ sel.innerHTML="";
+ if(!g){sel.disabled=true;sel.innerHTML='<option value="">اختر الجنس أولاً</option>';return;}
+ sel.disabled=false;
+ sel.innerHTML='<option value="">اختر...</option>'+MARITAL[g].map(x=>`<option>${x}</option>`).join("");
+};
+$("start").onclick=()=>{
+ const name=$("f_name").value.trim().replace(/\s+/g," ");
+ const gender=$("f_gender").value, marital=$("f_marital").value, age=$("f_age").value;
+ if(!name){$("intakeErr").textContent="فضلاً اكتب الاسم الأول أو اسماً مستعاراً.";return;}
+ if(!gender||!marital||!age){$("intakeErr").textContent="فضلاً أكمل الجنس والحالة الاجتماعية والفئة العمرية.";return;}
+ $("intakeErr").textContent="";
+ profile={name,gender,marital,age};
+ $("intake").classList.add("hidden");$("quiz").classList.remove("hidden");
+ window.scrollTo({top:0,behavior:"smooth"});
+};
+
+function pad(n){return String(n).padStart(2,"0");}
+function stamp(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+
+function saveToSheet(payload){
+ const box=$("saveStatus");
+ if(!SHEET_URL||saved)return;
+ box.classList.remove("hidden");box.textContent="جارٍ حفظ مشاركتك...";
+ fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)})
+  .then(()=>{saved=true;box.textContent="تم حفظ مشاركتك للتحليل العام. شكراً لك.";})
+  .catch(()=>{box.innerHTML='تعذّر الحفظ. <a href="#" id="retrySave">إعادة المحاولة</a>';
+   $("retrySave").onclick=e=>{e.preventDefault();saveToSheet(payload);};});
+}
+
 function render(){
  const q=questions[index];
  $("axis").textContent=q.axis;
@@ -179,7 +243,7 @@ function render(){
   const label=document.createElement("label");label.className="option";
   const input=document.createElement("input");input.type="radio";input.name="answer";input.value=i;input.checked=chosen[index]===i;
   input.addEventListener("change",()=>{chosen[index]=i;$("next").disabled=false;});
-  const span=document.createElement("span");span.textContent=String.fromCharCode(1571+i)+". "+item[0];
+  const span=document.createElement("span");span.textContent=LETTERS[i]+". "+item[0];
   label.append(input,span);$("answers").append(label);
  });
  $("back").disabled=index===0;
@@ -199,6 +263,7 @@ function showResult(){
  else if(pct>=70){title="توافق قابل للبناء";desc="هناك أساس مقبول، مع نقاط تحتاج إلى نقاش واضح قبل اتخاذ قرار الزواج.";cls="good";}
  else if(pct>=55){title="توافق مشروط";desc="توجد اختلافات مؤثرة. لا يُنصح بتجاوزها أو افتراض أنها ستختفي بعد الزواج.";cls="warn";}
  else{title="تباين مرتفع في التوقعات";desc="الإجابات تشير إلى اختلافات واسعة في فهم العلاقة أو المسؤوليات. يلزم حوار جاد قبل أي التزام.";cls="bad";}
+ window.__title=title;
  $("headline").className="result-box "+cls;
  $("headline").innerHTML=`<h3>${title}</h3><p><b>المؤشر العام: ${pct}%</b></p><p>${desc}</p>`;
  $("stats").innerHTML="";
@@ -229,9 +294,14 @@ function showResult(){
  if(low.length) recommendations.push("أكثر ما يحتاج إلى نقاش: "+low.map(x=>x[0]).join("، ")+".");
  else recommendations.push("لا يظهر محور منخفض بوضوح، لكن ينبغي مناقشة الأمثلة الواقعية لا الاكتفاء بالإجابات العامة.");
  $("interpretation").innerHTML=`<p>${recommendations[0]}</p><p>هذه التصنيفات تصف نمط الإجابات لا شخصية المرأة حكماً. قد تكون بعض الإجابات نابعة من تجارب سابقة أو مخاوف مشروعة أو شروط سكن ومال لم تُذكر في السؤال.</p><p><b>ملاحظة حول أهل الزوج:</b> احترام الوالدين والإحسان إليهما قيمة مهمة، لكنه لا يعني تلقائياً أن الزوجة ملزمة بخدمتهما أو السكن معهما. تُبحث هذه الأمور بالتراضي، مع مراعاة الحقوق والخصوصية والقدرة.</p>`;
+ const axisPct={};axisNames.forEach(n=>axisPct[n]=Math.round(dims[n].sum/dims[n].max*100));
+ const answers=questions.map((q,i)=>({letter:LETTERS[chosen[i]],score:q.a[chosen[i]][1]}));
+ saved=false;
+ saveToSheet({timestamp:stamp(),name:profile.name,gender:profile.gender,marital:profile.marital,age:profile.age,
+  total:total,max:max,percent:pct,classification:title,patterns:selected.map(x=>x[0]).join(" | "),axes:axisPct,answers:answers});
  window.scrollTo({top:0,behavior:"smooth"});
 }
-$("restart").onclick=()=>{chosen=Array(questions.length).fill(null);index=0;$("result").classList.add("hidden");$("quiz").classList.remove("hidden");render();window.scrollTo({top:0,behavior:"smooth"});};
+$("restart").onclick=()=>{chosen=Array(questions.length).fill(null);index=0;saved=false;$("saveStatus").classList.add("hidden");$("result").classList.add("hidden");$("quiz").classList.add("hidden");$("intake").classList.remove("hidden");render();window.scrollTo({top:0,behavior:"smooth"});};
 $("print").onclick=()=>window.print();
 render();
 </script>

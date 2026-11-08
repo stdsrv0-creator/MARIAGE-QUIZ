@@ -1,53 +1,360 @@
-// Google Apps Script — يستقبل نتائج الاختبار ويضيفها كصف جديد في الشيت
-const SHEET_NAME = "المشاركات";
-const AXES = ["الدين والقيم","القوامة والتفاهم","الخلاف والنضج","الأسرة والأبناء","أهل الزوج والسكن","المال والاستقرار"];
-const Q_COUNT = 18;
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اختبار التوافق للزواج</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#20242b;--muted:#68717d;--line:#e3e6eb;--accent:#394b68;--soft:#edf1f6;--good:#e7f3ec;--warn:#fff3dc;--bad:#fae9e8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Tahoma,Arial,sans-serif;line-height:1.75}
+main{max-width:850px;margin:24px auto;padding:0 14px 40px}.hero,.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:16px}
+h1{font-size:25px;margin:0 0 8px}h2{font-size:20px;margin:0 0 12px}h3{font-size:17px;margin:0 0 8px}
+p{margin:7px 0}.muted{color:var(--muted);font-size:14px}.notice{background:var(--soft);padding:12px 14px;border-radius:10px;font-size:14px;margin-top:14px}
+.progress-wrap{height:8px;background:#e9edf2;border-radius:10px;overflow:hidden;margin:12px 0}.progress{height:100%;background:var(--accent);width:0;transition:width .2s}
+.meta{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:13px}
+.question{font-size:20px;font-weight:bold;margin:12px 0 16px}
+.option{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:11px;margin:9px 0;cursor:pointer}
+.option:hover{background:#f8f9fb}.option input{margin-top:7px;accent-color:var(--accent);transform:scale(1.1)}
+.actions{display:flex;gap:10px;justify-content:space-between;margin-top:18px;flex-wrap:wrap}
+button{border:0;border-radius:10px;padding:11px 18px;font-size:15px;font-weight:bold;cursor:pointer;background:var(--accent);color:white}
+button.secondary{background:#e9edf2;color:var(--ink)}button:disabled{opacity:.4;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.stat{background:#f7f8fa;border:1px solid var(--line);border-radius:12px;padding:13px}
+.stat strong{display:block;font-size:23px}.bar{height:8px;background:#e9edf2;border-radius:8px;overflow:hidden;margin-top:7px}.bar span{display:block;height:100%;background:var(--accent)}
+.tag{display:inline-block;background:var(--soft);padding:4px 9px;border-radius:20px;font-size:12px;margin:3px}
+.result-box{border-right:4px solid var(--accent);padding:12px 15px;background:#f7f8fa;border-radius:9px;margin:12px 0}
+.good{background:var(--good)}.warn{background:var(--warn)}.bad{background:var(--bad)}
+.welcome-stats{background:var(--soft);border-radius:12px;padding:16px;margin:4px 0 16px}
+.welcome-stats .count{font-size:15px;margin-bottom:10px}.welcome-stats .count b{font-size:26px}
+.gbar{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:14px}.gbar .lbl{width:48px}.gbar .track{flex:1;height:14px;background:#fff;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.gbar .track span{display:block;height:100%;background:var(--accent);width:0;transition:width .8s}.gbar .pc{width:44px;text-align:left;font-weight:bold}
+.timer{display:flex;align-items:center;gap:10px;background:var(--soft);border-radius:30px;padding:6px 14px 6px 8px;width:max-content;margin:0 0 6px auto}
+.timer svg{width:38px;height:38px}.timer .digits{font-size:18px;font-weight:bold;font-variant-numeric:tabular-nums;direction:ltr;letter-spacing:1px}.timer .tl{font-size:12px;color:var(--muted)}
+.hidden{display:none}.small{font-size:13px;color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+.field{margin:14px 0}.field label{display:block;font-weight:bold;font-size:15px;margin-bottom:6px}
+.field input,.field select{width:100%;padding:11px 12px;font-size:15px;font-family:inherit;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.field select:disabled{background:#f1f3f6;color:var(--muted)}
+.err{color:#b3261e;font-size:13px;min-height:18px;margin:8px 0 0}
+.save-status{font-size:13px;margin-top:12px;padding:9px 12px;border-radius:9px;background:var(--soft)}
+@media(max-width:520px){main{margin:10px auto}.hero,.panel{padding:17px}.question{font-size:18px}}
+</style>
+</head>
+<body>
+<main>
+<section class="hero">
+<h1>اختبار التوافق للزواج</h1>
+<p>18 سؤالاً لقياس التقارب في الدين، وفهم الحقوق الزوجية، وإدارة الخلاف، والعلاقة مع أهل الزوج، والسكن، والمسؤوليات.</p>
+<div class="notice"><b>تنبيه:</b> هذا مقياس حواري استرشادي، وليس حكماً شرعياً أو تشخيصاً للشخصية، ولا يثبت وحده صلاحية أي طرف للزواج. تختلف الأحكام والتفاصيل باختلاف الظروف والاتفاقات والحقوق الشرعية والقانونية.</div>
+</section>
 
-function doPost(e) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(15000);
-  try {
-    const d = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+<section id="welcome" class="panel">
+<h2>مرحباً بك</h2>
+<div class="welcome-stats" id="stats" aria-live="polite"><div class="small">جارٍ تحميل إحصاءات المشاركة...</div></div>
+<p class="muted">يستغرق الاختبار بضع دقائق، وتظهر لك النتيجة والتحليل فور الانتهاء.</p>
+<div class="actions" style="justify-content:flex-end"><button id="begin" type="button">ابدأ الاستبيان</button></div>
+</section>
 
-    if (sh.getLastRow() === 0) {
-      const headers = ["تاريخ ووقت المشاركة","الاسم","الجنس","الحالة الاجتماعية","الفئة العمرية",
-        "الدرجة","من","النسبة المئوية %","التصنيف","الأنماط"]
-        .concat(AXES.map(a => "محور: " + a + " %"))
-        .concat(Array.from({length: Q_COUNT}, (_, i) => "س" + (i + 1)));
-      sh.appendRow(headers);
-      sh.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#394b68").setFontColor("#ffffff");
-      sh.setFrozenRows(1);
-      sh.setRightToLeft(true);
-    }
+<section id="intake" class="panel hidden">
+<h2>بيانات المشاركة</h2>
+<p class="muted">بيانات عامة للتصنيف والتحليل فقط، لا نطلب اسمك الكامل ولا أي معلومة تعريفية أو حساسة.</p>
+<div class="field"><label for="f_name">الاسم الأول أو اسم مستعار</label>
+<input id="f_name" type="text" maxlength="30" autocomplete="off" placeholder="مثال: سارة أو أم خالد"></div>
+<div class="field"><label for="f_gender">الجنس</label>
+<select id="f_gender"><option value="">اختر...</option><option>ذكر</option><option>أنثى</option></select></div>
+<div class="field"><label for="f_marital">الحالة الاجتماعية</label>
+<select id="f_marital" disabled><option value="">اختر الجنس أولاً</option></select></div>
+<div class="field"><label for="f_age">الفئة العمرية</label>
+<select id="f_age"><option value="">اختر...</option>
+<option>أقل من 20</option><option>20-25</option><option>26-30</option><option>31-35</option><option>36-40</option><option>41-45</option><option>فوق 45</option></select></div>
+<div class="err" id="intakeErr"></div>
+<div class="actions" style="justify-content:flex-end"><button id="start" type="button">ابدأ الاختبار</button></div>
+</section>
 
-    // الوقت يُسجَّل من الخادم بتوقيت الكويت
-    const when = Utilities.formatDate(new Date(), "Asia/Kuwait", "yyyy-MM-dd HH:mm:ss");
-    const row = [when, d.name, d.gender, d.marital, d.age, d.total, d.max, d.percent, d.classification, d.patterns]
-      .concat(AXES.map(a => d.axes[a]))
-      .concat(d.answers.map(a => a.letter + " (" + a.score + ")"));
-    sh.appendRow(row);
-    return ContentService.createTextOutput("ok");
-  } catch (err) {
-    return ContentService.createTextOutput("error: " + err);
-  } finally {
-    lock.releaseLock();
-  }
+<section id="quiz" class="panel hidden">
+<div class="timer" id="timer" aria-label="الوقت المستغرق">
+<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#fff" stroke="#394b68" stroke-width="2.5"/>
+<line id="minHand" x1="20" y1="20" x2="20" y2="9" stroke="#394b68" stroke-width="2.6" stroke-linecap="round"/>
+<line id="secHand" x1="20" y1="22" x2="20" y2="6" stroke="#c0392b" stroke-width="1.4" stroke-linecap="round"/>
+<circle cx="20" cy="20" r="2" fill="#394b68"/></svg>
+<div><div class="tl">الوقت المستغرق</div><div class="digits" id="clockDigits">00:00</div></div></div>
+<div class="meta"><span id="axis">المحور</span><span id="counter">السؤال 1 من 18</span></div>
+<div class="progress-wrap"><div class="progress" id="progress"></div></div>
+<div class="question" id="question"></div>
+<div id="answers"></div>
+<div class="actions">
+<button class="secondary" id="back" type="button">السابق</button>
+<button id="next" type="button" disabled>التالي</button>
+</div>
+<p class="small">اختاري الإجابة الأقرب إلى موقفك الفعلي، لا الإجابة التي تبدو مثالية اجتماعياً.</p>
+</section>
+
+<section id="result" class="panel hidden">
+<h2>النتيجة النهائية</h2>
+<div id="headline" class="result-box"></div>
+<div class="grid" id="stats"></div>
+<h3 style="margin-top:20px">النمط الأقرب للإجابات</h3>
+<div id="profiles"></div>
+<h3 style="margin-top:20px">قراءة مختصرة</h3>
+<div id="interpretation"></div>
+<h3 style="margin-top:20px">مبادئ الحياة الزوجية المتوازنة</h3>
+<ul>
+<li><b>المرجعية الشرعية:</b> تقوم العلاقة على المودة والرحمة والمعاشرة بالمعروف، وأداء الحقوق والواجبات، لا على السيطرة أو الإلغاء.</li>
+<li><b>القوامة والطاعة:</b> القوامة مسؤولية ونفقة ورعاية، والطاعة تكون في المعروف وضمن الحقوق والقدرة، وليست طاعة مطلقة أو تفويضاً بإلحاق الضرر.</li>
+<li><b>الخلاف:</b> الأصل الحوار والإنصاف والاعتذار، ورفض الإهانة والتهديد والتشهير وإقحام الآخرين. وعند تعذر الحل يُستعان بحَكَمَين أو وسيط موثوق.</li>
+<li><b>أهل الزوج:</b> يُعامل الوالدان والأقارب بالاحترام والإحسان وصلة الرحم، مع حفظ خصوصية الزوجين وحدود بيتهما. ولا يعني الزواج ذوبان شخصية الزوجة أو إلغاء حقوقها.</li>
+<li><b>السكن المشترك:</b> ليس قراراً يُفرض من طرف واحد. ينبغي بحث الخصوصية، والاستقلال، والقدرة المالية، وطبيعة المنزل، وراحة الطرفين، والحقوق الشرعية والقانونية قبل الاتفاق.</li>
+<li><b>الأسرة والمال:</b> تربية الأبناء والتخطيط المالي مسؤولية مشتركة بالتشاور، مع وضوح النفقة والالتزامات وعدم تحميل طرف ما لا يطيق.</li>
+</ul>
+<div class="notice">النتيجة الأفضل ليست أعلى رقم فقط؛ بل وجود توافق حقيقي في المسائل الجوهرية، وقدرة الطرفين على احترام الاختلاف والتفاوض بإنصاف.</div>
+<p id="duration" class="small"></p>
+<div id="saveStatus" class="save-status hidden"></div>
+<div class="actions"><button id="restart" type="button">إعادة الاختبار</button><button class="secondary" id="print" type="button">طباعة النتيجة</button></div>
+</section>
+<footer>الاختبار أداة نقاش أولية، ولا يغني عن التعارف الجاد والسؤال والاستشارة الشرعية عند الحاجة.</footer>
+</main>
+<script>
+const questions = [
+{axis:"الدين والقيم",q:"ما موقع الالتزام الديني في قرارات الأسرة اليومية؟",a:[
+["ألتزم بالثوابت الشرعية، وأناقش المسائل الاجتهادية بهدوء وتعلم.",3],
+["أرى أن التدين شأن شخصي، ولا أريد أن يكون مرجعاً لقرارات البيت.",0],
+["أهتم بالأساسيات، لكن لا أريد تحويل كل تفصيل إلى نقاش ديني.",2],
+["أحتاج إلى فهم وتدرج، ولا أستطيع تحديد موقفي في كل المسائل.",1]]},
+{axis:"الدين والقيم",q:"كيف تتعاملين مع اللباس والاحتشام بعد الزواج؟",a:[
+["أراه قناعة شخصية، وألتزم بما أعتقد أنه واجب شرعاً.",3],
+["أقبل الحوار حوله، لكن أرفض الإكراه أو الإهانة.",2],
+["أعتبره قراراً شخصياً لا أقبل مناقشته مطلقاً.",0],
+["قد تتغير اختياراتي حسب العمل والبيئة والظروف.",1]]},
+{axis:"الدين والقيم",q:"ما الحدود التي ترينها مناسبة للعلاقات الاجتماعية مع الرجال بعد الزواج؟",a:[
+["أحافظ على ضوابط واضحة، مع بقاء التعامل الضروري والمحترم.",3],
+["لا أرى أن الزواج يستلزم تغيير أي جانب من علاقاتي الحالية.",1],
+["أفضّل الاتفاق على حدود محددة تراعي الشرع وطبيعة العمل والحاجة.",3],
+["أرى أن للزوج حق منع أي تواصل حتى لو كان ضرورياً.",1]]},
+{axis:"القوامة والتفاهم",q:"كيف تفهمين قوامة الزوج؟",a:[
+["مسؤولية ورعاية ونفقة، مع التشاور والعدل وحسن المعاملة.",3],
+["سلطة نهائية للزوج في كل تفاصيل حياة الزوجة.",1],
+["لا أرى للقوامة معنى عملياً في الزواج المعاصر.",0],
+["قيادة للأسرة في إطار المعروف، مع احترام رأي الزوجة وحقوقها.",3]]},
+{axis:"القوامة والتفاهم",q:"إذا اختلفتِ مع زوجك في قرار أسري بعد أن استمع كل منكما للآخر، فما الأقرب لتصرفك؟",a:[
+["أطلب إعادة النقاش إذا ظهرت معلومات جديدة، وإلا أتعامل مع القرار المتفق عليه.",3],
+["أرفض القرار ما دام لا يطابق رغبتي.",0],
+["أقبل أن يحسم الزوج الأمر في نطاق مسؤوليته المشروعة، مع بقاء حقي في إبداء الرأي.",3],
+["أوافق ظاهرياً ثم أتصرف بما أراه مناسباً.",0]]},
+{axis:"القوامة والتفاهم",q:"إذا طلب زوجك أمراً مباحاً لا ترغبين فيه، ولا يترتب عليه ضرر أو مشقة معتبرة، كيف تتصرفين؟",a:[
+["أوضح سبب عدم رغبتي وأبحث عن بديل يراعي الطرفين.",3],
+["أستجيب أحياناً وأعتذر أحياناً بحسب الظرف، ولا أعد كل طلب ملزماً بالطريقة نفسها.",2],
+["أرفضه لمجرد أنني لا أريده، دون نقاش.",0],
+["أتعامل معه باعتباره طلباً له اعتبار، وأستجيب ما استطعت في المعروف.",3]]},
+{axis:"الخلاف والنضج",q:"عندما يحتد الخلاف، ما التصرف الأقرب لك؟",a:[
+["أواصل النقاش حتى ينتهي الخلاف مهما ارتفع التوتر.",1],
+["أطلب استراحة قصيرة ثم أعود للحوار في وقت محدد.",3],
+["أنسحب وأتجاهل الطرف الآخر أياماً حتى يبادر.",0],
+["أحتاج إلى شخص ثالث فوراً في كل خلاف.",1]]},
+{axis:"الخلاف والنضج",q:"إذا اكتشفتِ أنك أخطأتِ في حق زوجك، ماذا تفعلين؟",a:[
+["أعتذر بوضوح وأحاول إصلاح أثر الخطأ.",3],
+["أنتظر اعتذاره أولاً حتى لو كنت مخطئة أيضاً.",1],
+["أشرح ظروفي، لكن يصعب عليّ الاعتذار مباشرة.",2],
+["أعتبر الاعتذار تقليلاً من كرامتي.",0]]},
+{axis:"الخلاف والنضج",q:"إذا تكرر خلاف كبير ولم تستطيعا حله، ما خيارك؟",a:[
+["أطلب تدخّل شخص حكيم ومحايد بعد محاولة الحل بيننا.",3],
+["أعرض المشكلة على أهلي وأصدقائي لأحصل على دعمهم.",1],
+["أرفض أي وسيط مهما طال الخلاف.",1],
+["أقبل وسيطاً موثوقاً يتفق عليه الطرفان ويحفظ الخصوصية.",3]]},
+{axis:"الأسرة والأبناء",q:"ما تصورك لتقسيم مسؤوليات البيت والأطفال؟",a:[
+["نتفق على توزيع عملي حسب وقت كل طرف وقدرته، مع تقدير العمل المنزلي والرعاية.",3],
+["أرى أن كل أعمال المنزل والأطفال مسؤولية الزوجة وحدها مهما كانت ظروفها.",1],
+["أريد تقسيماً متساوياً حرفياً في كل مهمة مهما اختلفت ظروف العمل.",1],
+["أفضّل أن نتفق على الأدوار قبل الزواج، مع المرونة عند المرض أو ضغط العمل.",3]]},
+{axis:"الأسرة والأبناء",q:"ما حدود تدخل الأهل في القرارات الزوجية؟",a:[
+["نستشيرهم عند الحاجة، لكن القرار النهائي يخص الزوجين ضمن الشرع والحقوق.",3],
+["من حق أهلي التدخل في القرارات المهمة لأنهم يعرفون مصلحتي.",1],
+["لا أريد أي علاقة أو تواصل مع أهل الزوج.",0],
+["أحترم الأهل، لكن لا أشارك تفاصيل الخلافات الخاصة معهم.",3]]},
+{axis:"الأسرة والأبناء",q:"كيف تنظرين إلى الإنجاب وتربية الأطفال؟",a:[
+["أرغب في الأطفال، وأرى أن العدد والتوقيت يحتاجان إلى تشاور.",3],
+["لا أرغب في الإنجاب، وأفضّل أن يكون ذلك واضحاً قبل الزواج.",2],
+["أريد أطفالاً، لكن أتوقع أن يتحمل الزوج وحده مسؤولية تربيتهم.",0],
+["لم أحسم الأمر، وأحتاج إلى نقاش جاد حوله قبل الارتباط.",2]]},
+{axis:"أهل الزوج والسكن",q:"كيف ترين علاقتك بوالدي زوجك؟",a:[
+["أحترمهما وأحسن التعامل معهما، مع بقاء العلاقة بحدود صحية وخصوصية بيتي.",3],
+["أتعامل معهما بأدب، لكن لا أرى أن عليّ مسؤوليات إضافية تجاههما لم نتفق عليها.",3],
+["أتوقع أن تكون لهما أولوية في قرارات بيتنا حتى لو تعارضت مع رغبتنا.",1],
+["أفضل تقليل التواصل معهما إلى الحد الأدنى حتى دون وجود مشكلة.",0]]},
+{axis:"أهل الزوج والسكن",q:"إذا احتاج والدا زوجك إلى مساعدة أو رعاية منتظمة، فما موقفك؟",a:[
+["أرفض أي دور لي؛ رعايتهما مسؤولية الزوج وحده.",1],
+["أشارك بما أستطيع وبما نتفق عليه، مع مراعاة صحتي وواجباتي.",3],
+["أقبل تحمل الرعاية كاملة حتى لو أثّر ذلك بشدة على حياتي.",1],
+["أساند زوجي في ترتيب الرعاية، ويمكننا الاستعانة بأفراد الأسرة أو خدمات مناسبة.",3]]},
+{axis:"أهل الزوج والسكن",q:"ما موقفك من السكن مع أهل الزوج في منزل واحد؟",a:[
+["أقبل به إذا كانت هناك خصوصية ومساحة مستقلة واتفاق واضح، وكان مناسباً للطرفين.",3],
+["أرفضه تماماً مهما كانت الظروف أو طبيعة السكن.",2],
+["أقبله كحل مؤقت بمدة وخطة انتقال واضحتين.",3],
+["أراه واجباً على الزوجة، ولا ينبغي أن يكون لها اعتراض.",0]]},
+{axis:"أهل الزوج والسكن",q:"إذا حدث احتكاك أو خلاف مع أحد أفراد أهل الزوج، كيف تتصرفين؟",a:[
+["أضع حدوداً محترمة وأناقش الأمر مع زوجي بعيداً عن الإهانة والتصعيد.",3],
+["أطلب من زوجي قطع العلاقة فوراً مع الشخص المعني.",0],
+["أسكت دائماً حتى لا أسبب مشكلة، ولو تكرر التجاوز.",1],
+["أواجه الشخص مباشرة بانفعال حتى يعرف أنني لن أقبل ذلك.",0]]},
+{axis:"المال والاستقرار",q:"كيف تنظرين إلى إدارة ميزانية الأسرة؟",a:[
+["نتفق على ميزانية تناسب الدخل، مع وضوح النفقة والادخار والالتزامات.",3],
+["أريد مستوى إنفاق ثابتاً لا يتغير حتى لو انخفض دخل الزوج.",0],
+["أفضّل أن يدير الزوج المال وحده دون اطلاعي على الصورة العامة.",1],
+["أريد استقلالاً مالياً شخصياً، مع اتفاق واضح على مصاريف الأسرة.",3]]},
+{axis:"المال والاستقرار",q:"إذا مر زوجك بضائقة مالية أو فقد عمله، كيف تتعاملين؟",a:[
+["أسانده ونعيد ترتيب المصروفات والالتزامات بواقعية.",3],
+["أتفهم فترة محدودة، ثم أعتبر استمرار الضائقة سبباً كافياً لإنهاء الزواج.",0],
+["أساعد بحسب استطاعتي، مع عدم إسقاط حقوقي أو تحميل نفسي ما لا أطيق.",3],
+["أرى أن تدبير المشكلة مسؤوليته وحده ولا شأن لي بها.",0]]}
+];
+
+const LETTERS=["أ","ب","ج","د"];
+const axisNames=["الدين والقيم","القوامة والتفاهم","الخلاف والنضج","الأسرة والأبناء","أهل الزوج والسكن","المال والاستقرار"];
+let index=0, chosen=Array(questions.length).fill(null);
+const $=id=>document.getElementById(id);
+/* ====== إعدادات الحفظ في Google Sheets ======
+   الصق هنا رابط تطبيق الويب (Web app URL) من Google Apps Script بعد النشر.
+   إذا تُرك فارغاً لن تُحفظ البيانات. */
+const SHEET_URL="https://script.google.com/macros/s/AKfycbwwf4tUR2XW2WzjoZHYpcTOhlfoE7mNhaHMa3PRy1x9J1Q3DXt0OPNko3RrGeuJ7LQoPA/exec";
+
+const MARITAL={"ذكر":["أعزب","متزوج","مطلق"],"أنثى":["عزباء","متزوجة","مطلقة"]};
+let profile={name:"",gender:"",marital:"",age:""};
+let saved=false;
+
+$("f_gender").onchange=()=>{
+ const g=$("f_gender").value, sel=$("f_marital");
+ sel.innerHTML="";
+ if(!g){sel.disabled=true;sel.innerHTML='<option value="">اختر الجنس أولاً</option>';return;}
+ sel.disabled=false;
+ sel.innerHTML='<option value="">اختر...</option>'+MARITAL[g].map(x=>`<option>${x}</option>`).join("");
+};
+$("start").onclick=()=>{
+ const name=$("f_name").value.trim().replace(/\s+/g," ");
+ const gender=$("f_gender").value, marital=$("f_marital").value, age=$("f_age").value;
+ if(!name){$("intakeErr").textContent="فضلاً اكتب الاسم الأول أو اسماً مستعاراً.";return;}
+ if(!gender||!marital||!age){$("intakeErr").textContent="فضلاً أكمل الجنس والحالة الاجتماعية والفئة العمرية.";return;}
+ $("intakeErr").textContent="";
+ profile={name,gender,marital,age};
+ $("intake").classList.add("hidden");$("quiz").classList.remove("hidden");
+ startTimer();
+ window.scrollTo({top:0,behavior:"smooth"});
+};
+
+function pad(n){return String(n).padStart(2,"0");}
+function stamp(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+
+function saveToSheet(payload){
+ const box=$("saveStatus");
+ if(!SHEET_URL||saved)return;
+ box.classList.remove("hidden");box.textContent="جارٍ حفظ مشاركتك...";
+ fetch(SHEET_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)})
+  .then(()=>{saved=true;box.textContent="تم حفظ مشاركتك للتحليل العام. شكراً لك.";})
+  .catch(()=>{box.innerHTML='تعذّر الحفظ. <a href="#" id="retrySave">إعادة المحاولة</a>';
+   $("retrySave").onclick=e=>{e.preventDefault();saveToSheet(payload);};});
 }
 
-// إحصاءات المشاركة حسب الجنس (تظهر في شاشة الترحيب)
-function doGet() {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  let male = 0, female = 0;
-  if (sh && sh.getLastRow() > 1) {
-    const genders = sh.getRange(2, 3, sh.getLastRow() - 1, 1).getValues(); // العمود C = الجنس
-    genders.forEach(r => {
-      if (r[0] === "ذكر") male++;
-      else if (r[0] === "أنثى") female++;
-    });
-  }
-  return ContentService
-    .createTextOutput(JSON.stringify({ total: male + female, male: male, female: female }))
-    .setMimeType(ContentService.MimeType.JSON);
+/* ====== شاشة الترحيب والإحصاءات ====== */
+$("begin").onclick=()=>{$("welcome").classList.add("hidden");$("intake").classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"});};
+
+function renderStats(d){
+ const box=$("stats");
+ if(!d||!d.total){box.innerHTML='<div class="count">كن من أوائل المشاركين في هذا الاستبيان.</div>';return;}
+ const m=Math.round(d.male/d.total*100), f=100-m;
+ box.innerHTML='<div class="count">شارك حتى الآن <b>'+d.total+'</b> مشارك ومشاركة</div>'+
+  '<div class="gbar"><span class="lbl">ذكور</span><div class="track"><span style="width:0" data-w="'+m+'"></span></div><span class="pc">'+m+'%</span></div>'+
+  '<div class="gbar"><span class="lbl">إناث</span><div class="track"><span style="width:0" data-w="'+f+'"></span></div><span class="pc">'+f+'%</span></div>';
+ requestAnimationFrame(()=>box.querySelectorAll("[data-w]").forEach(e=>e.style.width=e.dataset.w+"%"));
 }
+function loadStats(){
+ if(!SHEET_URL){$("stats").classList.add("hidden");return;}
+ fetch(SHEET_URL+"?action=stats").then(r=>r.json()).then(renderStats).catch(()=>$("stats").classList.add("hidden"));
+}
+
+/* ====== مؤقت الاختبار ====== */
+let t0=0,tick=null,elapsed=0;
+function fmt(sec){return pad(Math.floor(sec/60))+":"+pad(sec%60);}
+function drawClock(){
+ elapsed=Math.floor((Date.now()-t0)/1000);
+ $("clockDigits").textContent=fmt(elapsed);
+ $("secHand").setAttribute("transform","rotate("+(elapsed%60)*6+" 20 20)");
+ $("minHand").setAttribute("transform","rotate("+(elapsed/60%60)*6+" 20 20)");
+}
+function startTimer(){t0=Date.now();clearInterval(tick);drawClock();tick=setInterval(drawClock,1000);}
+function stopTimer(){clearInterval(tick);drawClock();}
+
+function render(){
+ const q=questions[index];
+ $("axis").textContent=q.axis;
+ $("counter").textContent=`السؤال ${index+1} من ${questions.length}`;
+ $("progress").style.width=((index+1)/questions.length*100)+"%";
+ $("question").textContent=q.q;
+ $("answers").innerHTML="";
+ q.a.forEach((item,i)=>{
+  const label=document.createElement("label");label.className="option";
+  const input=document.createElement("input");input.type="radio";input.name="answer";input.value=i;input.checked=chosen[index]===i;
+  input.addEventListener("change",()=>{chosen[index]=i;$("next").disabled=false;});
+  const span=document.createElement("span");span.textContent=LETTERS[i]+". "+item[0];
+  label.append(input,span);$("answers").append(label);
+ });
+ $("back").disabled=index===0;
+ $("next").textContent=index===questions.length-1?"عرض النتيجة":"التالي";
+ $("next").disabled=chosen[index]===null;
+}
+$("back").onclick=()=>{if(index>0){index--;render();}};
+$("next").onclick=()=>{if(chosen[index]===null)return;if(index<questions.length-1){index++;render();}else showResult();};
+function showResult(){
+ const dims={};axisNames.forEach(n=>dims[n]={sum:0,max:0});
+ let total=0,max=0;
+ questions.forEach((q,i)=>{let v=q.a[chosen[i]][1];dims[q.axis].sum+=v;dims[q.axis].max+=3;total+=v;max+=3;});
+ const pct=Math.round(total/max*100);
+ $("quiz").classList.add("hidden");$("result").classList.remove("hidden");
+ let title,desc,cls;
+ if(pct>=85){title="توافق مبدئي مرتفع";desc="الإجابات تعكس تقارباً جيداً في معظم محاور الحياة الزوجية. تبقى التفاصيل العملية والاتفاقات الصريحة ضرورية.";cls="good";}
+ else if(pct>=70){title="توافق قابل للبناء";desc="هناك أساس مقبول، مع نقاط تحتاج إلى نقاش واضح قبل اتخاذ قرار الزواج.";cls="good";}
+ else if(pct>=55){title="توافق مشروط";desc="توجد اختلافات مؤثرة. لا يُنصح بتجاوزها أو افتراض أنها ستختفي بعد الزواج.";cls="warn";}
+ else{title="تباين مرتفع في التوقعات";desc="الإجابات تشير إلى اختلافات واسعة في فهم العلاقة أو المسؤوليات. يلزم حوار جاد قبل أي التزام.";cls="bad";}
+ window.__title=title;
+ stopTimer();$("duration").textContent="المدة المستغرقة: "+fmt(elapsed)+" دقيقة";
+ $("headline").className="result-box "+cls;
+ $("headline").innerHTML=`<h3>${title}</h3><p><b>المؤشر العام: ${pct}%</b></p><p>${desc}</p>`;
+ $("stats").innerHTML="";
+ Object.entries(dims).forEach(([name,d])=>{
+  const p=Math.round(d.sum/d.max*100);
+  const el=document.createElement("div");el.className="stat";
+  el.innerHTML=`<span>${name}</span><strong>${p}%</strong><div class="bar"><span style="width:${p}%"></span></div>`;
+  $("stats").append(el);
+ });
+ const scores=Object.entries(dims).map(([name,d])=>[name,Math.round(d.sum/d.max*100)]);
+ const low=scores.filter(x=>x[1]<55).sort((a,b)=>a[1]-b[1]);
+ const high=scores.filter(x=>x[1]>=80).sort((a,b)=>b[1]-a[1]);
+ const selected=[];
+ if(dims["المال والاستقرار"].sum/ dims["المال والاستقرار"].max<.55 || dims["القوامة والتفاهم"].sum/dims["القوامة والتفاهم"].max<.55)
+  selected.push(["تغليب المصلحة أو التوقعات الشخصية","تظهر بعض الإجابات أولوية مرتفعة للرغبات الفردية على التفاوض المتبادل. يلزم التحقق مما إذا كان ذلك متعلقاً بحق مشروع أو رفض للتعاون."]);
+ if(dims["الخلاف والنضج"].sum/dims["الخلاف والنضج"].max<.55)
+  selected.push(["صعوبة في إدارة الخلاف","الإجابات تشير إلى احتمالية الانسحاب أو التصعيد أو صعوبة الاعتذار. هذه نقطة محورية لأن الخلاف جزء طبيعي من الزواج."]);
+ if(dims["أهل الزوج والسكن"].sum/dims["أهل الزوج والسكن"].max<.55)
+  selected.push(["حساسية مرتفعة تجاه أهل الزوج أو السكن","توجد تحفظات أو توقعات غير متفق عليها بشأن الوالدين والسكن. لا تعني هذه النتيجة خطأ موقفها؛ بل تستلزم تحديد الحقوق والحدود وشكل السكن قبل الزواج."]);
+ if(dims["الدين والقيم"].sum/dims["الدين والقيم"].max<.55)
+  selected.push(["اختلاف في المرجعية والقيم","قد يكون هناك تباين في فهم الالتزام الديني وحدوده داخل الأسرة. يلزم حوار صريح حول الثوابت والمسائل الاجتهادية."]);
+ if(dims["الأسرة والأبناء"].sum/dims["الأسرة والأبناء"].max<.55)
+  selected.push(["عدم وضوح تصور الحياة الأسرية","توجد اختلافات محتملة حول الأدوار المنزلية أو الإنجاب أو تدخل الأهل. ينبغي الاتفاق عليها عملياً."]);
+ if(selected.length===0) selected.push(["توجه تشاركي متوازن","الإجابات تميل إلى مراعاة مصلحة الطرفين واستقرار العلاقة، مع قبول الحوار والاتفاق على الحدود والمسؤوليات."]);
+ if(high.length) selected.push(["نقاط قوة ظاهرة",`أعلى المحاور: ${high.map(x=>x[0]).join("، ")}.`]);
+ $("profiles").innerHTML=selected.map(x=>`<div class="result-box"><b>${x[0]}</b><p>${x[1]}</p></div>`).join("");
+ const recommendations=[];
+ if(low.length) recommendations.push("أكثر ما يحتاج إلى نقاش: "+low.map(x=>x[0]).join("، ")+".");
+ else recommendations.push("لا يظهر محور منخفض بوضوح، لكن ينبغي مناقشة الأمثلة الواقعية لا الاكتفاء بالإجابات العامة.");
+ $("interpretation").innerHTML=`<p>${recommendations[0]}</p><p>هذه التصنيفات تصف نمط الإجابات لا شخصية المرأة حكماً. قد تكون بعض الإجابات نابعة من تجارب سابقة أو مخاوف مشروعة أو شروط سكن ومال لم تُذكر في السؤال.</p><p><b>ملاحظة حول أهل الزوج:</b> احترام الوالدين والإحسان إليهما قيمة مهمة، لكنه لا يعني تلقائياً أن الزوجة ملزمة بخدمتهما أو السكن معهما. تُبحث هذه الأمور بالتراضي، مع مراعاة الحقوق والخصوصية والقدرة.</p>`;
+ const axisPct={};axisNames.forEach(n=>axisPct[n]=Math.round(dims[n].sum/dims[n].max*100));
+ const answers=questions.map((q,i)=>({letter:LETTERS[chosen[i]],score:q.a[chosen[i]][1]}));
+ saved=false;
+ saveToSheet({timestamp:stamp(),name:profile.name,gender:profile.gender,marital:profile.marital,age:profile.age,
+  total:total,max:max,percent:pct,classification:title,patterns:selected.map(x=>x[0]).join(" | "),axes:axisPct,answers:answers});
+ window.scrollTo({top:0,behavior:"smooth"});
+}
+$("restart").onclick=()=>{chosen=Array(questions.length).fill(null);index=0;saved=false;stopTimer();$("saveStatus").classList.add("hidden");$("result").classList.add("hidden");$("quiz").classList.add("hidden");$("intake").classList.remove("hidden");render();window.scrollTo({top:0,behavior:"smooth"});};
+$("print").onclick=()=>window.print();
+render();
+loadStats();
+</script>
+</body></html>
